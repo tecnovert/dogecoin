@@ -57,6 +57,12 @@ src/qt/bitcoin-qt.creator.user
 src/qt/bitcoin-qt.files
 src/qt/bitcoin-qt.includes
 
+src/qt/dogecoin-qt.config
+src/qt/dogecoin-qt.creator
+src/qt/dogecoin-qt.creator.user
+src/qt/dogecoin-qt.files
+src/qt/dogecoin-qt.includes
+
 .deps
 .dirstamp
 .libs
@@ -94,8 +100,8 @@ src/qt/bitcoin-qt.includes
 *.qm
 Makefile
 !depends/Makefile
-src/qt/bitcoin-qt
-Bitcoin-Qt.app
+src/qt/dogecoin-qt
+Dogecoin-Qt.app
 
 # Qt Creator
 Makefile.am.user

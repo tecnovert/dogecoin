@@ -11,14 +11,14 @@
   </array>
 
   <key>CFBundleIconFile</key>
-  <string>bitcoin.icns</string>
+  <string>dogecoin.icns</string>
 
   <key>CFBundlePackageType</key>
   <string>APPL</string>
 
   <key>CFBundleSupportedPlatforms</key>
   <array>
-	   <string>MacOSX</string>
+    <string>MacOSX</string>
   </array>
 
   <key>NSHumanReadableCopyright</key>
@@ -34,16 +34,16 @@
   <string>????</string>
 
   <key>CFBundleExecutable</key>
-  <string>Bitcoin-Qt</string>
+  <string>Dogecoin-Qt</string>
 
   <key>CFBundleName</key>
-  <string>Bitcoin-Qt</string>
+  <string>Dogecoin-Qt</string>
 
   <key>LSHasLocalizedDisplayName</key>
   <true/>
 
   <key>CFBundleIdentifier</key>
-  <string>org.bitcoinfoundation.Bitcoin-Qt</string>
+  <string>com.dogecoin.Dogecoin-Qt</string>
 
   <key>CFBundleURLTypes</key>
   <array>
@@ -51,7 +51,7 @@
       <key>CFBundleTypeRole</key>
       <string>Editor</string>
       <key>CFBundleURLName</key>
-      <string>org.bitcoin.BitcoinPayment</string>
+      <string>com.dogecoin.DogecoinPayment</string>
       <key>CFBundleURLSchemes</key>
       <array>
         <string>bitcoin</string>
