@@ -232,7 +232,7 @@ static bool rest_headers(const std::any& context,
     case RetFormat::BINARY: {
         CDataStream ssHeader(SER_NETWORK, PROTOCOL_VERSION);
         for (const CBlockIndex *pindex : headers) {
-            ssHeader << pindex->GetBlockHeader();
+            ssHeader << pindex->GetBlockHeader(Params().GetConsensus(pindex->nHeight));
         }
 
         std::string binaryHeader = ssHeader.str();
@@ -244,7 +244,7 @@ static bool rest_headers(const std::any& context,
     case RetFormat::HEX: {
         CDataStream ssHeader(SER_NETWORK, PROTOCOL_VERSION);
         for (const CBlockIndex *pindex : headers) {
-            ssHeader << pindex->GetBlockHeader();
+            ssHeader << pindex->GetBlockHeader(Params().GetConsensus(pindex->nHeight));
         }
 
         std::string strHex = HexStr(ssHeader) + "\n";
@@ -285,10 +285,10 @@ static bool rest_block(const std::any& context,
     CBlock block;
     CBlockIndex* pblockindex = nullptr;
     CBlockIndex* tip = nullptr;
+    ChainstateManager* maybe_chainman = GetChainman(context, req);
+    if (!maybe_chainman) return false;
+    ChainstateManager& chainman = *maybe_chainman;
     {
-        ChainstateManager* maybe_chainman = GetChainman(context, req);
-        if (!maybe_chainman) return false;
-        ChainstateManager& chainman = *maybe_chainman;
         LOCK(cs_main);
         tip = chainman.ActiveChain().Tip();
         pblockindex = chainman.m_blockman.LookupBlockIndex(hash);
@@ -323,7 +323,7 @@ static bool rest_block(const std::any& context,
     }
 
     case RetFormat::JSON: {
-        UniValue objBlock = blockToJSON(block, tip, pblockindex, tx_verbosity);
+        UniValue objBlock = blockToJSON(block, tip, pblockindex, tx_verbosity, chainman);
         std::string strJSON = objBlock.write() + "\n";
         req->WriteHeader("Content-Type", "application/json");
         req->WriteReply(HTTP_OK, strJSON);

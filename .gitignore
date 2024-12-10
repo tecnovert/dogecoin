@@ -2,17 +2,17 @@
 
 *.exe
 *.pdb
-src/bitcoin
-src/bitcoind
-src/bitcoin-cli
-src/bitcoin-gui
-src/bitcoin-node
-src/bitcoin-tx
-src/bitcoin-util
-src/bitcoin-wallet
+src/dogecoin
+src/dogecoind
+src/dogecoin-cli
+src/dogecoin-gui
+src/dogecoin-node
+src/dogecoin-tx
+src/dogecoin-util
+src/dogecoin-wallet
 src/test/fuzz/fuzz
-src/test/test_bitcoin
-src/qt/test/test_bitcoin-qt
+src/test/test_dogecoin
+src/qt/test/test_dogecoin-qt
 
 # autoreconf
 Makefile.in

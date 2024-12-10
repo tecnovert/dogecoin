@@ -17,6 +17,8 @@
 #include <consensus/validation.h>
 #include <cuckoocache.h>
 #include <deploymentstatus.h>
+#include <dogecoin.h>
+#include <dogecoin-fees.h>
 #include <flatfile.h>
 #include <hash.h>
 #include <index/blockfilterindex.h>
@@ -31,6 +33,7 @@
 #include <policy/settings.h>
 #include <pow.h>
 #include <primitives/block.h>
+#include <primitives/pureheader.h>
 #include <primitives/transaction.h>
 #include <random.h>
 #include <reverse_iterator.h>
@@ -391,7 +394,8 @@ void CChainState::MaybeUpdateMempoolForReorg(
                 const Coin& coin{CoinsTip().AccessCoin(txin.prevout)};
                 assert(!coin.IsSpent());
                 const auto mempool_spend_height{m_chain.Tip()->nHeight + 1};
-                if (coin.IsCoinBase() && mempool_spend_height - coin.nHeight < COINBASE_MATURITY) {
+                int nCoinbaseMaturity = Params().GetConsensus(coin.nHeight).nCoinbaseMaturity;
+                if (coin.IsCoinBase() && mempool_spend_height - coin.nHeight < nCoinbaseMaturity) {
                     return true;
                 }
             }
@@ -528,6 +532,8 @@ public:
                             /* m_package_submission */ true,
             };
         }
+
+        bool m_limit_free{false};
         // No default ctor to avoid exposing details to clients and allowing the possibility of
         // mixing up the order of the arguments. Use static functions above instead.
         ATMPArgs() = delete;
@@ -630,7 +636,7 @@ private:
          EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_pool.cs);
 
     // Compare a package's feerate against minimum allowed.
-    bool CheckFeeRate(size_t package_size, CAmount package_fee, TxValidationState& state) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, m_pool.cs)
+    bool CheckFeeRate(Workspace& ws, size_t package_size, CAmount package_fee, TxValidationState& state, bool limit_free) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, m_pool.cs)
     {
         AssertLockHeld(::cs_main);
         AssertLockHeld(m_pool.cs);
@@ -642,6 +648,30 @@ private:
         if (package_fee < ::minRelayTxFee.GetFee(package_size)) {
             return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "min relay fee not met", strprintf("%d < %d", package_fee, ::minRelayTxFee.GetFee(package_size)));
         }
+
+        // Continuously rate-limit free (really, very-low-fee) transactions
+        // This mitigates 'penny-flooding' -- sending thousands of free transactions just to
+        // be annoying or make others' transactions take longer to confirm.
+        if (limit_free && package_fee < GetDogecoinMinRelayFee(*ws.m_ptx, package_size, !limit_free, &m_pool))
+        {
+            static RecursiveMutex csFreeLimiter;
+            static double dFreeCount;
+            static int64_t nLastTime;
+            int64_t nNow = GetTime();
+
+            LOCK(csFreeLimiter);
+
+            // Use an exponentially decaying ~10-minute window:
+            dFreeCount *= pow(1.0 - 1.0/600.0, (double)(nNow - nLastTime));
+            nLastTime = nNow;
+            // -limitfreerelay unit is thousand-bytes-per-minute
+            // At default rate it would take over a month to fill 1GB
+            if (dFreeCount + package_size >= gArgs.GetIntArg("-limitfreerelay", DEFAULT_LIMITFREERELAY) * 10 * 1000)
+                return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "rate-limited-free-transaction");
+            LogPrint(BCLog::MEMPOOL, "Rate limit dFreeCount: %g => %g\n", dFreeCount, dFreeCount+package_size);
+            dFreeCount += package_size;
+        }
+
         return true;
     }
 
@@ -830,7 +860,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
 
     // No transactions are allowed below minRelayTxFee except from disconnected
     // blocks
-    if (!bypass_limits && !CheckFeeRate(ws.m_vsize, ws.m_modified_fees, state)) return false;
+    if (!bypass_limits && !CheckFeeRate(ws, ws.m_vsize, ws.m_modified_fees, state, args.m_limit_free)) return false;
 
     ws.m_iters_conflicting = m_pool.GetIterSet(ws.m_conflicts);
     // Calculate in-mempool ancestors, up to a limit.
@@ -1356,7 +1386,7 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptPackage(const Package& package, 
 } // anon namespace
 
 MempoolAcceptResult AcceptToMemoryPool(CChainState& active_chainstate, const CTransactionRef& tx,
-                                       int64_t accept_time, bool bypass_limits, bool test_accept)
+                                       int64_t accept_time, bool bypass_limits, bool test_accept, bool limit_free)
     EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
 {
     AssertLockHeld(::cs_main);
@@ -1366,6 +1396,7 @@ MempoolAcceptResult AcceptToMemoryPool(CChainState& active_chainstate, const CTr
 
     std::vector<COutPoint> coins_to_uncache;
     auto args = MemPoolAccept::ATMPArgs::SingleAccept(chainparams, accept_time, bypass_limits, coins_to_uncache, test_accept);
+    args.m_limit_free = limit_free;
     const MempoolAcceptResult result = MemPoolAccept(pool, active_chainstate).AcceptSingleTransaction(tx, args);
     if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
         // Remove coins that were not present in the coins cache before calling
@@ -2187,7 +2218,8 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(), MILLI * (nTime3 - nTime2), MILLI * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : MILLI * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * MICRO, nTimeConnect * MILLI / nBlocksTotal);
 
-    CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, m_params.GetConsensus());
+
+    CAmount blockReward = nFees + GetDogecoinBlockSubsidy(pindex->nHeight, m_params.GetConsensus(pindex->nHeight), hashPrevBlock);
     if (block.vtx[0]->GetValueOut() > blockReward) {
         LogPrintf("ERROR: ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)\n", block.vtx[0]->GetValueOut(), blockReward);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");
@@ -3233,7 +3265,10 @@ void CChainState::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pi
 static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
     // Check proof of work matches claimed amount
-    if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
+    // We don't have block height as this is called without context (i.e. without
+    // knowing the previous block), but that's okay, as the checks done are permissive
+    // (i.e. doesn't check work limit or whether AuxPoW is enabled)
+    if (fCheckPOW && !CheckAuxPowProofOfWork(block, consensusParams))
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
 
     return true;
@@ -3364,11 +3399,22 @@ std::vector<unsigned char> GenerateCoinbaseCommitment(CBlock& block, const CBloc
 static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, BlockManager& blockman, const CChainParams& params, const CBlockIndex* pindexPrev, int64_t nAdjustedTime) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
 {
     AssertLockHeld(::cs_main);
-    assert(pindexPrev != nullptr);
-    const int nHeight = pindexPrev->nHeight + 1;
+    const int nHeight = pindexPrev == nullptr ? 0 : pindexPrev->nHeight + 1;
+    const Consensus::Params& consensusParams = params.GetConsensus(nHeight);
+
+    // Disallow legacy blocks after merge-mining start.
+    if (!consensusParams.fAllowLegacyBlocks
+        && block.IsLegacy())
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "late-legacy-block", "legacy block after auxpow start");
+
+    // Dogecoin: Disallow AuxPow blocks before it is activated.
+    // TODO: Remove this test, as checkpoints will enforce this for us now
+    // NOTE: Previously this had its own fAllowAuxPoW flag, but that's always the opposite of fAllowLegacyBlocks
+    if (consensusParams.fAllowLegacyBlocks
+        && block.IsAuxpow())
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "early-auxpow-block", strprintf("auxpow blocks are not allowed at height %d, parameters effective from %d", pindexPrev->nHeight + 1, consensusParams.nHeightEffective));
 
     // Check proof of work
-    const Consensus::Params& consensusParams = params.GetConsensus();
     if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams))
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-diffbits", "incorrect proof of work");
 
@@ -3413,10 +3459,10 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
 {
     const int nHeight = pindexPrev == nullptr ? 0 : pindexPrev->nHeight + 1;
 
-    // Enforce BIP113 (Median Time Past).
+    // Start enforcing BIP113 (Median Time Past) using versionbits logic.
+    // Dogecoin: We probably want to disable this
     int nLockTimeFlags = 0;
     if (DeploymentActiveAfter(pindexPrev, consensusParams, Consensus::DEPLOYMENT_CSV)) {
-        assert(pindexPrev != nullptr);
         nLockTimeFlags |= LOCKTIME_MEDIAN_TIME_PAST;
     }
 
@@ -3732,7 +3778,7 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
     return true;
 }
 
-MempoolAcceptResult ChainstateManager::ProcessTransaction(const CTransactionRef& tx, bool test_accept)
+MempoolAcceptResult ChainstateManager::ProcessTransaction(const CTransactionRef& tx, bool test_accept, bool limit_free)
 {
     AssertLockHeld(cs_main);
     CChainState& active_chainstate = ActiveChainstate();
@@ -3741,7 +3787,7 @@ MempoolAcceptResult ChainstateManager::ProcessTransaction(const CTransactionRef&
         state.Invalid(TxValidationResult::TX_NO_MEMPOOL, "no-mempool");
         return MempoolAcceptResult::Failure(state);
     }
-    auto result = AcceptToMemoryPool(active_chainstate, tx, GetTime(), /*bypass_limits=*/ false, test_accept);
+    auto result = AcceptToMemoryPool(active_chainstate, tx, GetTime(), /*bypass_limits=*/ false, test_accept, limit_free);
     active_chainstate.GetMempool()->check(active_chainstate.CoinsTip(), active_chainstate.m_chain.Height() + 1);
     return result;
 }

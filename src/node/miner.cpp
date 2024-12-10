@@ -14,6 +14,7 @@
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <deploymentstatus.h>
+#include <dogecoin.h>
 #include <policy/feerate.h>
 #include <policy/policy.h>
 #include <pow.h>
@@ -127,11 +128,18 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     assert(pindexPrev != nullptr);
     nHeight = pindexPrev->nHeight + 1;
 
-    pblock->nVersion = g_versionbitscache.ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
+    const Consensus::Params& consensus = chainparams.GetConsensus(nHeight);
+    const int32_t nChainId = consensus.nAuxpowChainId;
+
+    // FIXME: Active version bits after the always-auxpow fork!
+    // const int32_t nVersion = g_versionbitscache.ComputeBlockVersion(pindexPrev, consensus);
+    const int32_t nVersion = VERSIONBITS_LAST_OLD_BLOCK_VERSION;
+    pblock->SetBaseVersion(nVersion, nChainId);
+
     // -regtest only: allow overriding block.nVersion with
     // -blockversion=N to test forking scenarios
     if (chainparams.MineBlocksOnDemand()) {
-        pblock->nVersion = gArgs.GetIntArg("-blockversion", pblock->nVersion);
+        pblock->SetBaseVersion(gArgs.GetIntArg("-blockversion", pblock->GetBaseVersion()), nChainId);
     }
 
     pblock->nTime = GetAdjustedTime();
@@ -146,7 +154,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     // not activated.
     // TODO: replace this with a call to main to assess validity of a mempool
     // transaction (which in most cases can be a no-op).
-    fIncludeWitness = DeploymentActiveAfter(pindexPrev, chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT);
+    fIncludeWitness = DeploymentActiveAfter(pindexPrev, consensus, Consensus::DEPLOYMENT_SEGWIT);
 
     int nPackagesSelected = 0;
     int nDescendantsUpdated = 0;
@@ -163,18 +171,19 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     coinbaseTx.vin[0].prevout.SetNull();
     coinbaseTx.vout.resize(1);
     coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
-    coinbaseTx.vout[0].nValue = nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus());
+    coinbaseTx.vout[0].nValue = nFees + GetDogecoinBlockSubsidy(nHeight, consensus, pindexPrev->GetBlockHash());
     coinbaseTx.vin[0].scriptSig = CScript() << nHeight << OP_0;
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
-    pblocktemplate->vchCoinbaseCommitment = GenerateCoinbaseCommitment(*pblock, pindexPrev, chainparams.GetConsensus());
+    pblocktemplate->vchCoinbaseCommitment = GenerateCoinbaseCommitment(*pblock, pindexPrev, consensus);
     pblocktemplate->vTxFees[0] = -nFees;
 
-    LogPrintf("CreateNewBlock(): block weight: %u txs: %u fees: %ld sigops %d\n", GetBlockWeight(*pblock), nBlockTx, nFees, nBlockSigOpsCost);
+    uint64_t nSerializeSize = GetSerializeSize(*pblock, PROTOCOL_VERSION);
+    LogPrintf("CreateNewBlock(): total size: %u block weight: %u txs: %u fees: %ld sigops %d\n", nSerializeSize, GetBlockWeight(*pblock), nBlockTx, nFees, nBlockSigOpsCost);
 
     // Fill in header
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
     UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev);
-    pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
+    pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, consensus);
     pblock->nNonce         = 0;
     pblocktemplate->vTxSigOpsCost[0] = WITNESS_SCALE_FACTOR * GetLegacySigOpCount(*pblock->vtx[0]);
 

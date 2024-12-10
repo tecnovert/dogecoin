@@ -12,6 +12,7 @@
 #include <interfaces/handler.h>
 #include <outputtype.h>
 #include <policy/feerate.h>
+#include <policy/policy.h>
 #include <psbt.h>
 #include <tinyformat.h>
 #include <util/message.h>
@@ -74,11 +75,21 @@ std::unique_ptr<WalletDatabase> MakeWalletDatabase(const std::string& name, cons
 //! -paytxfee default
 constexpr CAmount DEFAULT_PAY_TX_FEE = 0;
 //! -fallbackfee default
-static const CAmount DEFAULT_FALLBACK_FEE = 0;
+static const CAmount DEFAULT_FALLBACK_FEE = RECOMMENDED_MIN_TX_FEE;
 //! -discardfee default
 static const CAmount DEFAULT_DISCARD_FEE = 10000;
 //! -mintxfee default
-static const CAmount DEFAULT_TRANSACTION_MINFEE = 1000;
+static const CAmount DEFAULT_TRANSACTION_MINFEE = RECOMMENDED_MIN_TX_FEE;
+//! -discardthreshold default
+/* 1.14.5: set the wallet's discard threshold to 1 DOGE because that's what 97%
+ *         of the network currently implements as the hard dust limit. This
+ *         value can be changed when a significant portion of the relay network
+ *         and miners have adopted a different hard dust limit.
+ */
+/* 1.14.6: set the wallet's discard threshold to 0.01 DOGE. Very network
+ *         adoption of new hard dust limit
+ */
+static const CAmount DEFAULT_DISCARD_THRESHOLD = COIN / 100;
 //! -consolidatefeerate default
 static const CAmount DEFAULT_CONSOLIDATE_FEERATE{10000}; // 10 sat/vbyte
 /**
@@ -92,7 +103,15 @@ static const CAmount DEFAULT_MAX_AVOIDPARTIALSPEND_FEE = 0;
 //! discourage APS fee higher than this amount
 constexpr CAmount HIGH_APS_FEE{COIN / 10000};
 //! minimum recommended increment for BIP 125 replacement txs
-static const CAmount WALLET_INCREMENTAL_RELAY_FEE = 5000;
+/*
+ * Dogecoin: Scaled to 1/10th of the recommended transaction fee to make RBF
+ * cheaper than CPFP. This reduces onchain pollution by encouraging transactions
+ * to be replaced in the mempool, rather than be respent by another transaction
+ * which then both would have to be mined, taking up block space and increasing
+ * the amount of data that needs to be synchronized when validating the chain.
+ * This way, replacements for fee bumps are transient rather than persisted.
+ */
+static const CAmount WALLET_INCREMENTAL_RELAY_FEE = RECOMMENDED_MIN_TX_FEE / 10;
 //! Default for -spendzeroconfchange
 static const bool DEFAULT_SPEND_ZEROCONF_CHANGE = true;
 //! Default for -walletrejectlongchains
@@ -103,8 +122,10 @@ static const unsigned int DEFAULT_TX_CONFIRM_TARGET = 6;
 static const bool DEFAULT_WALLET_RBF = false;
 static const bool DEFAULT_WALLETBROADCAST = true;
 static const bool DEFAULT_DISABLE_WALLET = false;
+
 //! -maxtxfee default
-constexpr CAmount DEFAULT_TRANSACTION_MAXFEE{COIN / 10};
+//rnicoll: 8/2021 scaled down as recommended fee is lowered
+constexpr CAmount DEFAULT_TRANSACTION_MAXFEE = RECOMMENDED_MIN_TX_FEE * 10000;
 //! Discourage users to set fees higher than this amount (in satoshis) per kB
 constexpr CAmount HIGH_TX_FEE_PER_KB{COIN / 100};
 //! -maxtxfee will warn if called with a higher fee than this amount (in satoshis)
@@ -118,7 +139,7 @@ class CWalletTx;
 class ReserveDestination;
 
 //! Default for -addresstype
-constexpr OutputType DEFAULT_ADDRESS_TYPE{OutputType::BECH32};
+constexpr OutputType DEFAULT_ADDRESS_TYPE{OutputType::LEGACY};
 
 static constexpr uint64_t KNOWN_WALLET_FLAGS =
         WALLET_FLAG_AVOID_REUSE
@@ -617,6 +638,13 @@ public:
      /** If the cost to spend a change output at this feerate is greater than the value of the
       * output itself, just drop it to fees. */
     CFeeRate m_discard_rate{DEFAULT_DISCARD_FEE};
+
+    /**
+     * Dogecoin: Effective dust limit for the wallet
+     * - Outputs smaller than this get rejected
+     * - Change smaller than this gets discarded to fee
+     */
+    CAmount m_discard_threshold = DEFAULT_DISCARD_THRESHOLD;
 
     /** When the actual feerate is less than the consolidate feerate, we will tend to make transactions which
      * consolidate inputs. When the actual feerate is greater than the consolidate feerate, we will tend to make

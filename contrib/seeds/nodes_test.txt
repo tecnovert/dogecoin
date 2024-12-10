@@ -1,16 +1,25 @@
 # List of fixed seed nodes for testnet
 
-# Onion nodes
-35k2va6vyw4oo5ly2quvcszgdqr56kcnfgcqpnpcffut4jn3mhhwgbid.onion:18333
-blo2esfvk2rr7sr4jspmu3vt2vpgr5rigflsj645fnku7v4qmljurtid.onion:18333
-fuckcswupr5rmlvx2kqqrrosxvjyong4hatmuvxsvtcwe4dsh5rus7qd.onion:18333
-gblylyacjlitd2ywdmo2qqylwtdky7kgeqfvlhiw4zdag4x62tx54hyd.onion:18333
-gzwpduv33l7yze3bcdzj3inebiyjwddjnwvnjhh5wvnv4me76mjt2kad.onion:18333
-h3rphzofxzq52tb63mg5f6kc4my3fkcrgh3m5qryeatts43iljbawiid.onion:18333
-kf4qlhek34b3kgyxyodlmvgm4bxfrjsbjtgayyaiuyhr2eoyfgtm3bad.onion:18333
-mc7k47ndjvvhcgs54wmjzxvate4rtuybbjoryikdssjhcxlx27psbyqd.onion:18333
-mrhiniicugfo7mgrwv3wtolk3tptlcw2uq7ih6sq43fa4k4zbilut3yd.onion:18333
-uiudyws3qizgmepfoh7wwjmsoxoxut4qrmotjjhrn247xnjopr7sfcid.onion:18333
-zc2wvoqcezcrf64trji6jmhtss34a5ds5ntzdhqegzvex3ynrd7nxcad.onion:18333
-zd5m3dgdn46naj36pxvvcalfw2paecle6sdxq64ptwxtxjomkywpklqd.onion:18333
+[2600:3c00::f03c:91ff:fe5b:4cf3]:44556
+167.179.147.155:44556
+[2001:19f0:ac01:105e:5400:3ff:fee8:e995]:44556
+[2a01:4f9:c012:5ab0::1]:44556
+[2600:3c00::f03c:91ff:fe9e:7f03]:44556
+[2a01:4f9:3081:35da::2]:44556
+15.235.55.110:44556
+37.27.37.73:44556
+198.58.102.18:44556
+45.63.86.162:44556
+194.110.169.133:44556
+65.109.229.85:44556
+185.232.70.226:44556
+80.82.21.77:44556
+104.237.131.138:44556
+37.27.68.95:44556
+65.21.95.163:44556
+38.50.247.160:44556
+20.48.60.13:44556
+165.227.227.139:44556
+35.84.106.212:44556
+89.58.9.219:44556
 

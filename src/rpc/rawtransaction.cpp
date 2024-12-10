@@ -54,7 +54,7 @@ using node::NodeContext;
 using node::PSBTAnalysis;
 using node::ReadBlockFromDisk;
 
-static void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& entry, CChainState& active_chainstate)
+void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& entry, CChainState& active_chainstate)
 {
     // Call into TxToUniv() in bitcoin-common to decode the transaction hex.
     //
@@ -915,7 +915,7 @@ static RPCHelpMan sendrawtransaction()
     std::string err_string;
     AssertLockNotHeld(cs_main);
     NodeContext& node = EnsureAnyNodeContext(request.context);
-    const TransactionError err = BroadcastTransaction(node, tx, err_string, max_raw_tx_fee, /*relay*/ true, /*wait_callback*/ true);
+    const TransactionError err = BroadcastTransaction(node, tx, err_string, max_raw_tx_fee, /*relay*/ true, /*wait_callback*/ true, /*limit_free*/ false);
     if (TransactionError::OK != err) {
         throw JSONRPCTransactionError(err, err_string);
     }

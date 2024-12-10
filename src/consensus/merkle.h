@@ -10,6 +10,7 @@
 #include <primitives/block.h>
 #include <uint256.h>
 
+std::vector<uint256> ComputeMerkleBranch(const std::vector<uint256>& leaves, uint32_t position);
 uint256 ComputeMerkleRoot(std::vector<uint256> hashes, bool* mutated = nullptr);
 
 /*
@@ -23,5 +24,12 @@ uint256 BlockMerkleRoot(const CBlock& block, bool* mutated = nullptr);
  * *mutated is set to true if a duplicated subtree was found.
  */
 uint256 BlockWitnessMerkleRoot(const CBlock& block, bool* mutated = nullptr);
+
+/*
+ * Compute the Merkle branch for the tree of transactions in a block, for a
+ * given position.
+ * This can be verified using ComputeMerkleRootFromBranch.
+ */
+std::vector<uint256> BlockMerkleBranch(const CBlock& block, uint32_t position);
 
 #endif // BITCOIN_CONSENSUS_MERKLE_H

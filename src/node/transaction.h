@@ -24,7 +24,7 @@ struct NodeContext;
  * By default, a transaction with a fee rate higher than this will be rejected
  * by these RPCs and the GUI. This can be overridden with the maxfeerate argument.
  */
-static const CFeeRate DEFAULT_MAX_RAW_TX_FEE_RATE{COIN / 10};
+static const CFeeRate DEFAULT_MAX_RAW_TX_FEE_RATE{COIN * 25};  // 5
 
 /**
  * Submit a transaction to the mempool and (optionally) relay it to all P2P peers.
@@ -43,7 +43,7 @@ static const CFeeRate DEFAULT_MAX_RAW_TX_FEE_RATE{COIN / 10};
  * @param[in]  wait_callback wait until callbacks have been processed to avoid stale result due to a sequentially RPC.
  * return error
  */
-[[nodiscard]] TransactionError BroadcastTransaction(NodeContext& node, CTransactionRef tx, std::string& err_string, const CAmount& max_tx_fee, bool relay, bool wait_callback);
+[[nodiscard]] TransactionError BroadcastTransaction(NodeContext& node, CTransactionRef tx, std::string& err_string, const CAmount& max_tx_fee, bool relay, bool wait_callback, bool limit_free=true);
 
 /**
  * Return transaction with a given hash.

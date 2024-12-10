@@ -2865,6 +2865,24 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
         }
     }
 
+    if (args.IsArgSet("-discardthreshold")) {
+        std::optional<CAmount> discard_threshold = ParseMoney(args.GetArg("-discardthreshold", ""));
+        if (!discard_threshold) {
+            error = AmountErrMsg("discardthreshold", args.GetArg("-discardthreshold", ""));
+            return nullptr;
+        }
+        if (discard_threshold.value() < nDustLimit) {
+            error = strprintf(_("Invalid amount for -discardthreshold=<amount>: '%s' (must be at least the dust limit of %s to prevent stuck transactions)"),
+                                discard_threshold.value(), FormatMoney(nDustLimit));
+            return nullptr;
+        }
+        if (discard_threshold.value() > HIGH_TX_FEE_PER_KB) {
+            warnings.push_back(AmountHighWarn("-discardthreshold") + Untranslated(" ") +
+                               _("This is the output amount that the wallet will discard (to fee) if it is smaller than this setting."));
+        }
+        walletInstance->m_discard_threshold = discard_threshold.value();
+    }
+
     if (args.IsArgSet("-maxtxfee")) {
         std::optional<CAmount> max_fee = ParseMoney(args.GetArg("-maxtxfee", ""));
         if (!max_fee) {
@@ -3099,9 +3117,20 @@ int CWallet::GetTxBlocksToMaturity(const CWalletTx& wtx) const
 {
     if (!wtx.IsCoinBase())
         return 0;
-    int chain_depth = GetTxDepthInMainChain(wtx);
+    //int chain_depth = GetTxDepthInMainChain(wtx);
+    int last_height = GetLastBlockHeight();
+    int consensus_height = last_height;
+    int chain_depth = 0;
+    if (auto* conf = wtx.state<TxStateConfirmed>()) {
+        chain_depth = last_height - conf->confirmed_block_height + 1;
+        consensus_height = conf->confirmed_block_height;
+    } else if (auto* conf = wtx.state<TxStateConflicted>()) {
+        chain_depth = (last_height - conf->conflicting_block_height + 1);
+        consensus_height = conf->conflicting_block_height;
+    }
+    int nCoinbaseMaturity = Params().GetConsensus(consensus_height).nCoinbaseMaturity;
     assert(chain_depth >= 0); // coinbase tx should not be conflicted
-    return std::max(0, (COINBASE_MATURITY+1) - chain_depth);
+    return std::max(0, (nCoinbaseMaturity+1) - chain_depth);
 }
 
 bool CWallet::IsTxImmatureCoinBase(const CWalletTx& wtx) const

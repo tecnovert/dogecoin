@@ -8,6 +8,7 @@
 #include <chainparams.h>
 #include <clientversion.h>
 #include <consensus/validation.h>
+#include <dogecoin.h>
 #include <flatfile.h>
 #include <fs.h>
 #include <hash.h>
@@ -760,7 +761,7 @@ bool ReadBlockFromDisk(CBlock& block, const FlatFilePos& pos, const Consensus::P
     }
 
     // Check the header
-    if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams)) {
+    if (!CheckAuxPowProofOfWork(block, consensusParams)) {
         return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
     }
 
@@ -777,6 +778,50 @@ bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex, const Consensus
     const FlatFilePos block_pos{WITH_LOCK(cs_main, return pindex->GetBlockPos())};
 
     if (!ReadBlockFromDisk(block, block_pos, consensusParams)) {
+        return false;
+    }
+    if (block.GetHash() != pindex->GetBlockHash()) {
+        return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s",
+                     pindex->ToString(), block_pos.ToString());
+    }
+    return true;
+}
+
+bool ReadBlockHeaderFromDisk(CBlockHeader& block, const FlatFilePos& pos, const Consensus::Params& consensusParams, bool fCheckPOW)
+{
+    block.SetNull();
+
+    // Open history file to read
+    CAutoFile filein(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION);
+    if (filein.IsNull()) {
+        return error("ReadBlockFromDisk: OpenBlockFile failed for %s", pos.ToString());
+    }
+
+    // Read block
+    try {
+        filein >> block;
+    } catch (const std::exception& e) {
+        return error("%s: Deserialize or I/O error - %s at %s", __func__, e.what(), pos.ToString());
+    }
+
+    // Check the header
+    if (!CheckAuxPowProofOfWork(block, consensusParams)) {
+        return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
+    }
+
+    // Signet only: check block solution
+    if (consensusParams.signet_blocks && !CheckSignetBlockSolution(block, consensusParams)) {
+        return error("ReadBlockFromDisk: Errors in block solution at %s", pos.ToString());
+    }
+
+    return true;
+}
+
+bool ReadBlockHeaderFromDisk(CBlockHeader& block, const CBlockIndex* pindex, const Consensus::Params& consensusParams, bool fCheckPOW)
+{
+    const FlatFilePos block_pos{WITH_LOCK(cs_main, return pindex->GetBlockPos())};
+
+    if (!ReadBlockHeaderFromDisk(block, block_pos, consensusParams, fCheckPOW)) {
         return false;
     }
     if (block.GetHash() != pindex->GetBlockHash()) {

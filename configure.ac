@@ -6,8 +6,8 @@ define(_CLIENT_VERSION_RC, 0)
 define(_CLIENT_VERSION_IS_RELEASE, true)
 define(_COPYRIGHT_YEAR, 2022)
 define(_COPYRIGHT_HOLDERS,[The %s developers])
-define(_COPYRIGHT_HOLDERS_SUBSTITUTION,[[Bitcoin Core]])
-AC_INIT([Bitcoin Core],m4_join([.], _CLIENT_VERSION_MAJOR, _CLIENT_VERSION_MINOR, _CLIENT_VERSION_BUILD)m4_if(_CLIENT_VERSION_RC, [0], [], [rc]_CLIENT_VERSION_RC),[https://github.com/bitcoin/bitcoin/issues],[bitcoin],[https://bitcoincore.org/])
+define(_COPYRIGHT_HOLDERS_SUBSTITUTION,[[Bitcoin Core and Dogecoin Core]])
+AC_INIT([Dogecoin Core],m4_join([.], _CLIENT_VERSION_MAJOR, _CLIENT_VERSION_MINOR, _CLIENT_VERSION_BUILD)m4_if(_CLIENT_VERSION_RC, [0], [], [rc]_CLIENT_VERSION_RC),[https://github.com/bitcoin/bitcoin/issues],[bitcoin],[https://bitcoincore.org/])
 AC_CONFIG_SRCDIR([src/validation.cpp])
 AC_CONFIG_HEADERS([src/config/bitcoin-config.h])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -19,15 +19,15 @@ if test "$PKG_CONFIG" = ""; then
   AC_MSG_ERROR([pkg-config not found])
 fi
 
-BITCOIN_DAEMON_NAME=bitcoind
-BITCOIN_GUI_NAME=bitcoin-qt
-BITCOIN_CLI_NAME=bitcoin-cli
-BITCOIN_TX_NAME=bitcoin-tx
-BITCOIN_UTIL_NAME=bitcoin-util
-BITCOIN_WALLET_TOOL_NAME=bitcoin-wallet
+BITCOIN_DAEMON_NAME=dogecoind
+BITCOIN_GUI_NAME=dogecoin-qt
+BITCOIN_CLI_NAME=dogecoin-cli
+BITCOIN_TX_NAME=dogecoin-tx
+BITCOIN_UTIL_NAME=dogecoin-util
+BITCOIN_WALLET_TOOL_NAME=dogecoin-wallet
 dnl Multi Process
-BITCOIN_MP_NODE_NAME=bitcoin-node
-BITCOIN_MP_GUI_NAME=bitcoin-gui
+BITCOIN_MP_NODE_NAME=dogecoin-node
+BITCOIN_MP_GUI_NAME=dogecoin-gui
 
 dnl Unless the user specified ARFLAGS, force it to be cr
 AC_ARG_VAR([ARFLAGS], [Flags for the archiver, defaults to <cr> if not set])
@@ -1820,6 +1820,7 @@ AM_CONDITIONAL([USE_ASM], [test "$use_asm" = "yes"])
 AM_CONDITIONAL([WORDS_BIGENDIAN], [test "$ac_cv_c_bigendian" = "yes"])
 AM_CONDITIONAL([USE_NATPMP], [test "$use_natpmp" = "yes"])
 AM_CONDITIONAL([USE_UPNP], [test "$use_upnp" = "yes"])
+AM_CONDITIONAL([USE_SCRYPT_SSE2], [test x$use_scrypt_sse2 = xyes])
 
 dnl for minisketch
 AM_CONDITIONAL([ENABLE_CLMUL], [test "$enable_clmul" = "yes"])

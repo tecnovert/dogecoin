@@ -122,13 +122,12 @@ bool IsStandardTx(const CTransaction& tx, bool permit_bare_multisig, const CFeeR
             reason = "scriptpubkey";
             return false;
         }
-
         if (whichType == TxoutType::NULL_DATA)
             nDataOut++;
         else if ((whichType == TxoutType::MULTISIG) && (!permit_bare_multisig)) {
             reason = "bare-multisig";
             return false;
-        } else if (IsDust(txout, dust_relay_fee)) {
+        } else if (txout.IsDust(nHardDustLimit)) {
             reason = "dust";
             return false;
         }
@@ -293,3 +292,6 @@ int64_t GetVirtualTransactionInputSize(const CTxIn& txin, int64_t nSigOpCost, un
 {
     return GetVirtualTransactionSize(GetTransactionInputWeight(txin), nSigOpCost, bytes_per_sigop);
 }
+
+CAmount nDustLimit = DEFAULT_DUST_LIMIT;
+CAmount nHardDustLimit = DEFAULT_HARD_DUST_LIMIT;

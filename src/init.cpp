@@ -17,6 +17,7 @@
 #include <compat/sanity.h>
 #include <consensus/amount.h>
 #include <deploymentstatus.h>
+#include <dogecoin-fees.h>
 #include <fs.h>
 #include <hash.h>
 #include <httprpc.h>
@@ -131,7 +132,7 @@ static const char* DEFAULT_ASMAP_FILENAME="ip_asn.map";
 /**
  * The PID file facilities.
  */
-static const char* BITCOIN_PID_FILENAME = "bitcoind.pid";
+static const char* BITCOIN_PID_FILENAME = "dogecoind.pid";
 
 static fs::path GetPidFile(const ArgsManager& args)
 {
@@ -552,6 +553,8 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-incrementalrelayfee=<amt>", strprintf("Fee rate (in %s/kvB) used to define cost of relay, used for mempool limiting and BIP 125 replacement. (default: %s)", CURRENCY_UNIT, FormatMoney(DEFAULT_INCREMENTAL_RELAY_FEE)), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::NODE_RELAY);
     argsman.AddArg("-dustrelayfee=<amt>", strprintf("Fee rate (in %s/kvB) used to define dust, the value of an output such that it will cost more than its value in fees at this fee rate to spend it. (default: %s)", CURRENCY_UNIT, FormatMoney(DUST_RELAY_TX_FEE)), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::NODE_RELAY);
     argsman.AddArg("-bytespersigop", strprintf("Equivalent bytes per sigop in transactions for relay and mining (default: %u)", DEFAULT_BYTES_PER_SIGOP), ArgsManager::ALLOW_ANY, OptionsCategory::NODE_RELAY);
+    argsman.AddArg("-dustlimit=<amt>", strprintf("Amount under which a transaction output is considered dust, in %s (default: %s)", CURRENCY_UNIT, FormatMoney(DEFAULT_DUST_LIMIT)), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::NODE_RELAY);
+    argsman.AddArg("-harddustlimit=<amt>", strprintf("Amount under which a transaction output is considered non-standard and will not be accepted or relayed, in %s (default: %s)", CURRENCY_UNIT, FormatMoney(DEFAULT_HARD_DUST_LIMIT)), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::NODE_RELAY);
     argsman.AddArg("-datacarrier", strprintf("Relay and mine data carrier transactions (default: %u)", DEFAULT_ACCEPT_DATACARRIER), ArgsManager::ALLOW_ANY, OptionsCategory::NODE_RELAY);
     argsman.AddArg("-datacarriersize", strprintf("Maximum size of data in data carrier transactions we relay and mine (default: %u)", MAX_OP_RETURN_RELAY), ArgsManager::ALLOW_ANY, OptionsCategory::NODE_RELAY);
     argsman.AddArg("-minrelaytxfee=<amt>", strprintf("Fees (in %s/kvB) smaller than this are considered zero fee for relaying, mining and transaction creation (default: %s)",
@@ -561,6 +564,9 @@ void SetupServerArgs(ArgsManager& argsman)
 
 
     argsman.AddArg("-blockmaxweight=<n>", strprintf("Set maximum BIP141 block weight (default: %d)", DEFAULT_BLOCK_MAX_WEIGHT), ArgsManager::ALLOW_ANY, OptionsCategory::BLOCK_CREATION);
+    argsman.AddArg("-blockmaxsize=<n>", strprintf("Set maximum block size in bytes (default: %d)", DEFAULT_BLOCK_MAX_SIZE), ArgsManager::ALLOW_ANY, OptionsCategory::BLOCK_CREATION);
+    argsman.AddArg("-blockprioritysize=<n>", strprintf("Set maximum size of high-priority/low-fee transactions in bytes (default: %d)", DEFAULT_BLOCK_PRIORITY_SIZE), ArgsManager::ALLOW_ANY, OptionsCategory::BLOCK_CREATION);
+
     argsman.AddArg("-blockmintxfee=<amt>", strprintf("Set lowest fee rate (in %s/kvB) for transactions to be included in block creation. (default: %s)", CURRENCY_UNIT, FormatMoney(DEFAULT_BLOCK_MIN_TX_FEE)), ArgsManager::ALLOW_ANY, OptionsCategory::BLOCK_CREATION);
     argsman.AddArg("-blockversion=<n>", "Override block version to test forking scenarios", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::BLOCK_CREATION);
 
@@ -578,6 +584,8 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-rpcwhitelist=<whitelist>", "Set a whitelist to filter incoming RPC calls for a specific user. The field <whitelist> comes in the format: <USERNAME>:<rpc 1>,<rpc 2>,...,<rpc n>. If multiple whitelists are set for a given user, they are set-intersected. See -rpcwhitelistdefault documentation for information on default whitelist behavior.", ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
     argsman.AddArg("-rpcwhitelistdefault", "Sets default behavior for rpc whitelisting. Unless rpcwhitelistdefault is set to 0, if any -rpcwhitelist is set, the rpc server acts as if all rpc users are subject to empty-unless-otherwise-specified whitelists. If rpcwhitelistdefault is set to 1 and no -rpcwhitelist is set, rpc server acts as if all rpc users are subject to empty whitelists.", ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
     argsman.AddArg("-rpcworkqueue=<n>", strprintf("Set the depth of the work queue to service RPC calls (default: %d)", DEFAULT_HTTP_WORKQUEUE), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::RPC);
+    argsman.AddArg("-rpcnamecoinapi", strprintf("Use Namecoin-compatible AuxPow API structure, (default: %d)", DEFAULT_USE_NAMECOIN_API), ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
+
     argsman.AddArg("-server", "Accept command line and JSON-RPC commands", ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
 
 #if HAVE_DECL_FORK
@@ -984,7 +992,8 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     // Sanity check argument for min fee for including tx in block
     // TODO: Harmonize which arguments need sanity checking and where that happens
     if (args.IsArgSet("-blockmintxfee")) {
-        if (!ParseMoney(args.GetArg("-blockmintxfee", ""))) {
+        if (std::optional<CAmount> block_min_tx_fee = ParseMoney(args.GetArg("-blockmintxfee", ""))) {
+        } else {
             return InitError(AmountErrMsg("blockmintxfee", args.GetArg("-blockmintxfee", "")));
         }
     }
@@ -1004,6 +1013,28 @@ bool AppInitParameterInteraction(const ArgsManager& args)
         return InitError(strprintf(Untranslated("acceptnonstdtxn is not currently supported for %s chain"), chainparams.NetworkIDString()));
     }
     nBytesPerSigOp = args.GetIntArg("-bytespersigop", nBytesPerSigOp);
+
+    if (args.IsArgSet("-harddustlimit")) {
+        if (std::optional<CAmount> parsed = ParseMoney(args.GetArg("-harddustlimit", ""))) {
+            nHardDustLimit = parsed.value();
+        } else {
+            return InitError(AmountErrMsg("harddustlimit", args.GetArg("-harddustlimit", "")));
+        }
+    }
+
+    if (args.IsArgSet("-dustlimit")) {
+        if (std::optional<CAmount> parsed = ParseMoney(args.GetArg("-dustlimit", ""))) {
+            nDustLimit = parsed.value();
+        } else {
+            return InitError(AmountErrMsg("dustlimit", args.GetArg("-dustlimit", "")));
+        }
+    }
+
+    if (nDustLimit < nHardDustLimit)
+    {
+      nDustLimit = nHardDustLimit;
+      LogPrintf("Increasing -dustlimit to %s to match -harddustlimit\n", FormatMoney(nHardDustLimit));
+    }
 
     if (!g_wallet_init_interface.ParameterInteraction()) return false;
 
@@ -1059,6 +1090,8 @@ bool AppInitParameterInteraction(const ArgsManager& args)
         LogPrintf("Experimental syscall sandbox enabled (-sandbox=%s): bitcoind will terminate if an unexpected (not allowlisted) syscall is invoked.\n", sandbox_arg);
     }
 #endif // USE_SYSCALL_SANDBOX
+
+    DogecoinParameterInteraction();
 
     return true;
 }

@@ -20,13 +20,15 @@ enum BuriedDeployment : int16_t {
     DEPLOYMENT_HEIGHTINCB = std::numeric_limits<int16_t>::min(),
     DEPLOYMENT_CLTV,
     DEPLOYMENT_DERSIG,
-    DEPLOYMENT_CSV,
-    DEPLOYMENT_SEGWIT,
+    //DEPLOYMENT_CSV,
+    //DEPLOYMENT_SEGWIT,
 };
-constexpr bool ValidDeployment(BuriedDeployment dep) { return dep <= DEPLOYMENT_SEGWIT; }
+constexpr bool ValidDeployment(BuriedDeployment dep) { return dep <= DEPLOYMENT_DERSIG; }
 
 enum DeploymentPos : uint16_t {
     DEPLOYMENT_TESTDUMMY,
+    DEPLOYMENT_CSV,
+    DEPLOYMENT_SEGWIT,
     DEPLOYMENT_TAPROOT, // Deployment of Schnorr/Taproot (BIPs 340-342)
     // NOTE: Also add new deployments to VersionBitsDeploymentInfo in deploymentinfo.cpp
     MAX_VERSION_BITS_DEPLOYMENTS
@@ -96,6 +98,7 @@ struct Params {
     uint32_t nRuleChangeActivationThreshold;
     uint32_t nMinerConfirmationWindow;
     BIP9Deployment vDeployments[MAX_VERSION_BITS_DEPLOYMENTS];
+    uint32_t nCoinbaseMaturity;
     /** Proof of work parameters */
     uint256 powLimit;
     bool fPowAllowMinDifficultyBlocks;
@@ -124,13 +127,25 @@ struct Params {
             return BIP65Height;
         case DEPLOYMENT_DERSIG:
             return BIP66Height;
-        case DEPLOYMENT_CSV:
-            return CSVHeight;
-        case DEPLOYMENT_SEGWIT:
-            return SegwitHeight;
         } // no default case, so the compiler can warn about missing cases
         return std::numeric_limits<int>::max();
     }
+
+    /** Dogecoin-specific parameters */
+    bool fDigishieldDifficultyCalculation;
+    bool fPowAllowDigishieldMinDifficultyBlocks; // Allow minimum difficulty blocks where a retarget would normally occur
+    bool fSimplifiedRewards{false}; // Use block height derived rewards rather than previous block hash derived
+
+    /** Auxpow parameters */
+    int32_t nAuxpowChainId;
+    bool fStrictChainId;
+    bool fAllowLegacyBlocks;
+
+    /** Height-aware consensus parameters */
+    uint32_t nHeightEffective; // When these parameters come into use
+    struct Params *pLeft = nullptr;      // Left hand branch
+    struct Params *pRight = nullptr;     // Right hand branch
+    const Consensus::Params *GetConsensus(uint32_t nTargetHeight) const;
 };
 
 } // namespace Consensus

@@ -427,6 +427,19 @@ public:
     CScript(std::vector<unsigned char>::const_iterator pbegin, std::vector<unsigned char>::const_iterator pend) : CScriptBase(pbegin, pend) { }
     CScript(const unsigned char* pbegin, const unsigned char* pend) : CScriptBase(pbegin, pend) { }
 
+    CScript& operator+=(const CScript& b)
+    {
+        insert(end(), b.begin(), b.end());
+        return *this;
+    }
+
+    friend CScript operator+(const CScript& a, const CScript& b)
+    {
+        CScript ret = a;
+        ret += b;
+        return ret;
+    }
+
     SERIALIZE_METHODS(CScript, obj) { READWRITEAS(CScriptBase, obj); }
 
     explicit CScript(int64_t b) { operator<<(b); }

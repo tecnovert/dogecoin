@@ -38,9 +38,10 @@ struct TestBlockAndIndex {
 
 static void BlockToJsonVerbose(benchmark::Bench& bench)
 {
+    const auto testing_setup = MakeNoLogFileContext<const TestingSetup>();
     TestBlockAndIndex data;
     bench.run([&] {
-        auto univalue = blockToJSON(data.block, &data.blockindex, &data.blockindex, TxVerbosity::SHOW_DETAILS_AND_PREVOUT);
+        auto univalue = blockToJSON(data.block, &data.blockindex, &data.blockindex, TxVerbosity::SHOW_DETAILS_AND_PREVOUT, *testing_setup.get()->m_node.chainman);
         ankerl::nanobench::doNotOptimizeAway(univalue);
     });
 }
@@ -49,8 +50,9 @@ BENCHMARK(BlockToJsonVerbose);
 
 static void BlockToJsonVerboseWrite(benchmark::Bench& bench)
 {
+    const auto testing_setup = MakeNoLogFileContext<const TestingSetup>();
     TestBlockAndIndex data;
-    auto univalue = blockToJSON(data.block, &data.blockindex, &data.blockindex, TxVerbosity::SHOW_DETAILS_AND_PREVOUT);
+    auto univalue = blockToJSON(data.block, &data.blockindex, &data.blockindex, TxVerbosity::SHOW_DETAILS_AND_PREVOUT, *testing_setup.get()->m_node.chainman);
     bench.run([&] {
         auto str = univalue.write();
         ankerl::nanobench::doNotOptimizeAway(str);

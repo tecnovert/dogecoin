@@ -2833,6 +2833,13 @@ std::vector<CAddress> CConnman::GetAddresses(CNode& requestor, size_t max_addres
 bool CConnman::AddNode(const std::string& strNode)
 {
     LOCK(m_added_nodes_mutex);
+
+    // We only allow 100x the amount of total connections, to protect against
+    // script errors that fill up memory of the node with addresses
+    if (m_added_nodes.size() >= MAX_ADDNODE_CONNECTIONS * 100) {
+        return false;
+    }
+
     for (const std::string& it : m_added_nodes) {
         if (strNode == it) return false;
     }

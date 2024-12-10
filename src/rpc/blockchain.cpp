@@ -76,6 +76,8 @@ static Mutex cs_blockchange;
 static std::condition_variable cond_blockchange;
 static CUpdatedBlock latestblock GUARDED_BY(cs_blockchange);
 
+extern void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& entry, CChainState& active_chainstate);
+
 /* Calculate the difficulty for a given block index.
  */
 double GetDifficulty(const CBlockIndex* blockindex)
@@ -137,6 +139,42 @@ CBlockIndex* ParseHashOrHeight(const UniValue& param, ChainstateManager& chainma
     }
 }
 
+UniValue AuxpowToJSON(const CAuxPow& auxpow, ChainstateManager& chainman)
+{
+    UniValue result(UniValue::VOBJ);
+
+    {
+        UniValue tx(UniValue::VOBJ);
+        tx.pushKV("hex", EncodeHexTx(auxpow));
+        TxToJSON(auxpow, auxpow.parentBlock.GetHash(), tx, chainman.ActiveChainstate());
+        result.pushKV("tx", tx);
+    }
+
+    result.pushKV("index", auxpow.nIndex);
+    result.pushKV("chainindex", auxpow.nChainIndex);
+
+    {
+        UniValue branch(UniValue::VARR);
+        for (const uint256& node : auxpow.vMerkleBranch)
+            branch.push_back(node.GetHex());
+        result.pushKV("merklebranch", branch);
+    }
+
+    {
+        UniValue branch(UniValue::VARR);
+        for (const uint256& node : auxpow.vChainMerkleBranch)
+            branch.push_back(node.GetHex());
+        result.pushKV("chainmerklebranch", branch);
+    }
+
+    CDataStream ssParent(SER_NETWORK, PROTOCOL_VERSION);
+    ssParent << auxpow.parentBlock;
+    const std::string strHex = HexStr(ssParent);
+    result.pushKV("parentblock", strHex);
+
+    return result;
+}
+
 UniValue blockheaderToJSON(const CBlockIndex* tip, const CBlockIndex* blockindex)
 {
     // Serialize passed information without accessing chain state of the active chain!
@@ -166,9 +204,13 @@ UniValue blockheaderToJSON(const CBlockIndex* tip, const CBlockIndex* blockindex
     return result;
 }
 
-UniValue blockToJSON(const CBlock& block, const CBlockIndex* tip, const CBlockIndex* blockindex, TxVerbosity verbosity)
+UniValue blockToJSON(const CBlock& block, const CBlockIndex* tip, const CBlockIndex* blockindex, TxVerbosity verbosity, ChainstateManager& chainman)
 {
     UniValue result = blockheaderToJSON(tip, blockindex);
+
+    if (block.auxpow) {
+        result.pushKV("auxpow", AuxpowToJSON(*block.auxpow, chainman));
+    }
 
     result.pushKV("strippedsize", (int)::GetSerializeSize(block, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS));
     result.pushKV("size", (int)::GetSerializeSize(block, PROTOCOL_VERSION));
@@ -920,7 +962,7 @@ static RPCHelpMan getblockheader()
     if (!fVerbose)
     {
         CDataStream ssBlock(SER_NETWORK, PROTOCOL_VERSION);
-        ssBlock << pblockindex->GetBlockHeader();
+        ssBlock << pblockindex->GetBlockHeader(Params().GetConsensus(pblockindex->nHeight));
         std::string strHex = HexStr(ssBlock);
         return strHex;
     }
@@ -1000,6 +1042,10 @@ static RPCHelpMan getblock()
                     {RPCResult::Type::NUM, "nTx", "The number of transactions in the block"},
                     {RPCResult::Type::STR_HEX, "previousblockhash", /*optional=*/true, "The hash of the previous block (if available)"},
                     {RPCResult::Type::STR_HEX, "nextblockhash", /*optional=*/true, "The hash of the next block (if available)"},
+                    {RPCResult::Type::OBJ_DYN, "auxpow", /*optional=*/true, "",
+                    {
+                        {RPCResult::Type::STR_HEX, "hex", "The serialized, hex-encoded data for auxpow tx"},
+                    }},
                 }},
                     RPCResult{"for verbosity = 2",
                 RPCResult::Type::OBJ, "", "",
@@ -1066,8 +1112,8 @@ static RPCHelpMan getblock()
     CBlock block;
     const CBlockIndex* pblockindex;
     const CBlockIndex* tip;
+    ChainstateManager& chainman = EnsureAnyChainman(request.context);
     {
-        ChainstateManager& chainman = EnsureAnyChainman(request.context);
         LOCK(cs_main);
         pblockindex = chainman.m_blockman.LookupBlockIndex(hash);
         tip = chainman.ActiveChain().Tip();
@@ -1096,7 +1142,7 @@ static RPCHelpMan getblock()
         tx_verbosity = TxVerbosity::SHOW_DETAILS_AND_PREVOUT;
     }
 
-    return blockToJSON(block, tip, pblockindex, tx_verbosity);
+    return blockToJSON(block, tip, pblockindex, tx_verbosity, chainman);
 },
     };
 }
@@ -2134,6 +2180,9 @@ static RPCHelpMan getblockstats()
                 {RPCResult::Type::NUM, "avgfeerate", /*optional=*/true, "Average feerate (in satoshis per virtual byte)"},
                 {RPCResult::Type::NUM, "avgtxsize", /*optional=*/true, "Average transaction size"},
                 {RPCResult::Type::STR_HEX, "blockhash", /*optional=*/true, "The block hash (to check for potential reorgs)"},
+                {RPCResult::Type::NUM, "dustouts", /*optional=*/true, "Number of outputs under the dust limit (excluding coinbase and OP_RETURN)"},
+                {RPCResult::Type::NUM, "minoutamount", /*optional=*/true, "Minumum output value (excluding coinbase and OP_RETURN)"},
+                {RPCResult::Type::NUM, "maxoutamount", /*optional=*/true, "Maximum output value (excluding coinbase and OP_RETURN)"},
                 {RPCResult::Type::ARR_FIXED, "feerate_percentiles", /*optional=*/true, "Feerates at the 10th, 25th, 50th, 75th, and 90th percentile weight unit (in satoshis per virtual byte)",
                 {
                     {RPCResult::Type::NUM, "10th_percentile_feerate", "The 10th percentile feerate"},
@@ -2196,9 +2245,10 @@ static RPCHelpMan getblockstats()
     const bool do_mediantxsize = do_all || stats.count("mediantxsize") != 0;
     const bool do_medianfee = do_all || stats.count("medianfee") != 0;
     const bool do_feerate_percentiles = do_all || stats.count("feerate_percentiles") != 0;
+    const bool do_duststats = do_all || SetHasKeys(stats, "minoutamount", "maxoutamount", "dustouts");
     const bool loop_inputs = do_all || do_medianfee || do_feerate_percentiles ||
         SetHasKeys(stats, "utxo_size_inc", "totalfee", "avgfee", "avgfeerate", "minfee", "maxfee", "minfeerate", "maxfeerate");
-    const bool loop_outputs = do_all || loop_inputs || stats.count("total_out");
+    const bool loop_outputs = do_all || loop_inputs || do_duststats || stats.count("total_out");
     const bool do_calculate_size = do_mediantxsize ||
         SetHasKeys(stats, "total_size", "avgtxsize", "mintxsize", "maxtxsize", "swtotal_size");
     const bool do_calculate_weight = do_all || SetHasKeys(stats, "total_weight", "avgfeerate", "swtotal_weight", "avgfeerate", "feerate_percentiles", "minfeerate", "maxfeerate");
@@ -2210,6 +2260,9 @@ static RPCHelpMan getblockstats()
     CAmount minfeerate = MAX_MONEY;
     CAmount total_out = 0;
     CAmount totalfee = 0;
+    CAmount minoutamount = MAX_MONEY;
+    CAmount maxoutamount = 0;
+    int64_t dustouts = 0;
     int64_t inputs = 0;
     int64_t maxtxsize = 0;
     int64_t mintxsize = MAX_BLOCK_SERIALIZED_SIZE;
@@ -2233,6 +2286,28 @@ static RPCHelpMan getblockstats()
             for (const CTxOut& out : tx->vout) {
                 tx_total_out += out.nValue;
                 utxo_size_inc += GetSerializeSize(out, PROTOCOL_VERSION) + PER_UTXO_OVERHEAD;
+                if (do_duststats) {
+                    if (tx->IsCoinBase()) {
+                        continue;
+                    }
+
+                    TxoutType whichType;
+                    if (::IsStandard(out.scriptPubKey, whichType)) {
+                        if (whichType == TxoutType::NULL_DATA) {
+                            continue;
+                        }
+                    }
+
+                    if (out.nValue > maxoutamount) {
+                        maxoutamount = out.nValue;
+                    }
+                    if (out.nValue < minoutamount) {
+                        minoutamount = out.nValue;
+                    }
+                    if (out.nValue < nDustLimit) {
+                        dustouts += 1;
+                    }
+                }
             }
         }
 
@@ -2309,6 +2384,9 @@ static RPCHelpMan getblockstats()
     ret_all.pushKV("avgfeerate", total_weight ? (totalfee * WITNESS_SCALE_FACTOR) / total_weight : 0); // Unit: sat/vbyte
     ret_all.pushKV("avgtxsize", (block.vtx.size() > 1) ? total_size / (block.vtx.size() - 1) : 0);
     ret_all.pushKV("blockhash", pindex->GetBlockHash().GetHex());
+    ret_all.pushKV("dustouts", dustouts);
+    ret_all.pushKV("minoutamount", (minoutamount == MAX_MONEY) ? 0 : minoutamount);
+    ret_all.pushKV("maxoutamount", maxoutamount);
     ret_all.pushKV("feerate_percentiles", feerates_res);
     ret_all.pushKV("height", (int64_t)pindex->nHeight);
     ret_all.pushKV("ins", inputs);

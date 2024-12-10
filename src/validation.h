@@ -53,7 +53,7 @@ class SnapshotMetadata;
 } // namespace node
 
 /** Default for -minrelaytxfee, minimum relay fee for transactions */
-static const unsigned int DEFAULT_MIN_RELAY_TX_FEE = 1000;
+static const unsigned int DEFAULT_MIN_RELAY_TX_FEE = RECOMMENDED_MIN_TX_FEE / 10;
 /** Default for -limitancestorcount, max number of in-mempool ancestors */
 static const unsigned int DEFAULT_ANCESTOR_LIMIT = 25;
 /** Default for -limitancestorsize, maximum kilobytes of tx + all in-mempool ancestors */
@@ -78,6 +78,7 @@ static const unsigned int DEFAULT_MEMPOOL_EXPIRY = 336;
 static const int MAX_SCRIPTCHECK_THREADS = 15;
 /** -par default (number of script-checking threads, 0 = auto) */
 static const int DEFAULT_SCRIPTCHECK_THREADS = 0;
+static const unsigned int DEFAULT_LIMITFREERELAY = 0;
 static const int64_t DEFAULT_MAX_TIP_AGE = 24 * 60 * 60;
 static const bool DEFAULT_CHECKPOINTS_ENABLED = true;
 static const bool DEFAULT_TXINDEX = false;
@@ -258,7 +259,7 @@ struct PackageMempoolAcceptResult
  * @returns a MempoolAcceptResult indicating whether the transaction was accepted/rejected with reason.
  */
 MempoolAcceptResult AcceptToMemoryPool(CChainState& active_chainstate, const CTransactionRef& tx,
-                                       int64_t accept_time, bool bypass_limits, bool test_accept)
+                                       int64_t accept_time, bool bypass_limits, bool test_accept, bool limit_free=true)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 /**
@@ -982,7 +983,7 @@ public:
      * @param[in]  tx              The transaction to submit for mempool acceptance.
      * @param[in]  test_accept     When true, run validation checks but don't submit to mempool.
      */
-    [[nodiscard]] MempoolAcceptResult ProcessTransaction(const CTransactionRef& tx, bool test_accept=false)
+    [[nodiscard]] MempoolAcceptResult ProcessTransaction(const CTransactionRef& tx, bool test_accept=false, bool limit_free=true)
         EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     //! Load the block tree and coins database from disk, initializing state if we're running with -reindex

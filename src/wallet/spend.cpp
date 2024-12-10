@@ -742,7 +742,7 @@ static bool CreateTransactionInternal(
             coin_selection_params.tx_noinputs_size += ::GetSerializeSize(txout, PROTOCOL_VERSION);
         }
 
-        if (IsDust(txout, wallet.chain().relayDustFee()))
+        if (txout.IsDust(wallet.m_discard_threshold))
         {
             error = _("Transaction amount too small");
             return false;
@@ -820,7 +820,8 @@ static bool CreateTransactionInternal(
     // 1. The change output would be dust
     // 2. The change is within the (almost) exact match window, i.e. it is less than or equal to the cost of the change output (cost_of_change)
     CAmount change_amount = change_position->nValue;
-    if (IsDust(*change_position, coin_selection_params.m_discard_feerate) || change_amount <= coin_selection_params.m_cost_of_change)
+    //if (IsDust(*change_position, coin_selection_params.m_discard_feerate) || change_amount <= coin_selection_params.m_cost_of_change)
+    if (change_position->IsDust(wallet.m_discard_threshold))
     {
         nChangePosInOut = -1;
         change_amount = 0;
@@ -864,7 +865,7 @@ static bool CreateTransactionInternal(
                 }
 
                 // Error if this output is reduced to be below dust
-                if (IsDust(txout, wallet.chain().relayDustFee())) {
+                if (txout.IsDust(wallet.m_discard_threshold)) {
                     if (txout.nValue < 0) {
                         error = _("The transaction amount is too small to pay the fee");
                     } else {

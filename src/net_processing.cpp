@@ -1069,7 +1069,7 @@ void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count
     if (state->pindexLastCommonBlock == state->pindexBestKnownBlock)
         return;
 
-    const Consensus::Params& consensusParams = m_chainparams.GetConsensus();
+    const Consensus::Params& consensusParams = m_chainparams.GetConsensus(m_chainman.ActiveChain().Height());
     std::vector<const CBlockIndex*> vToFetch;
     const CBlockIndex *pindexWalk = state->pindexLastCommonBlock;
     // Never fetch further than the best block we know the peer has, or more than BLOCK_DOWNLOAD_WINDOW + 1 beyond the last
@@ -1466,7 +1466,7 @@ bool PeerManagerImpl::BlockRequestAllowed(const CBlockIndex* pindex)
     if (m_chainman.ActiveChain().Contains(pindex)) return true;
     return pindex->IsValid(BLOCK_VALID_SCRIPTS) && (pindexBestHeader != nullptr) &&
            (pindexBestHeader->GetBlockTime() - pindex->GetBlockTime() < STALE_RELAY_AGE_LIMIT) &&
-           (GetBlockProofEquivalentTime(*pindexBestHeader, *pindex, *pindexBestHeader, m_chainparams.GetConsensus()) < STALE_RELAY_AGE_LIMIT);
+           (GetBlockProofEquivalentTime(*pindexBestHeader, *pindex, *pindexBestHeader, m_chainparams.GetConsensus(pindex->nHeight)) < STALE_RELAY_AGE_LIMIT);
 }
 
 std::optional<std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, const CBlockIndex& block_index)
@@ -1603,7 +1603,7 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
         return;
     nHighestFastAnnounce = pindex->nHeight;
 
-    bool fWitnessEnabled = DeploymentActiveAt(*pindex, m_chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT);
+    bool fWitnessEnabled = DeploymentActiveAt(*pindex, m_chainparams.GetConsensus(pindex->nHeight), Consensus::DEPLOYMENT_SEGWIT);
     uint256 hashBlock(pblock->GetHash());
 
     {
@@ -1899,7 +1899,7 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
     } else {
         // Send block from disk
         std::shared_ptr<CBlock> pblockRead = std::make_shared<CBlock>();
-        if (!ReadBlockFromDisk(*pblockRead, pindex, m_chainparams.GetConsensus())) {
+        if (!ReadBlockFromDisk(*pblockRead, pindex, m_chainparams.GetConsensus(pindex->nHeight))) {
             assert(!"cannot load block from disk");
         }
         pblock = pblockRead;
@@ -2218,7 +2218,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
             while (pindexWalk && !m_chainman.ActiveChain().Contains(pindexWalk) && vToFetch.size() <= MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
                 if (!(pindexWalk->nStatus & BLOCK_HAVE_DATA) &&
                         !IsBlockRequested(pindexWalk->GetBlockHash()) &&
-                        (!DeploymentActiveAt(*pindexWalk, m_chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT) || State(pfrom.GetId())->fHaveWitness)) {
+                        (!DeploymentActiveAt(*pindexWalk, m_chainparams.GetConsensus(pindexWalk->nHeight), Consensus::DEPLOYMENT_SEGWIT) || State(pfrom.GetId())->fHaveWitness)) {
                     // We don't have this block, and it's not yet in flight.
                     vToFetch.push_back(pindexWalk);
                 }
@@ -3152,7 +3152,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             }
             // If pruning, don't inv blocks unless we have on disk and are likely to still have
             // for some reasonable time window (1 hour) that block relay might require.
-            const int nPrunedBlocksLikelyToHave = MIN_BLOCKS_TO_KEEP - 3600 / m_chainparams.GetConsensus().nPowTargetSpacing;
+            const int nPrunedBlocksLikelyToHave = MIN_BLOCKS_TO_KEEP - 3600 / m_chainparams.GetConsensus(pindex->nHeight).nPowTargetSpacing;
             if (fPruneMode && (!(pindex->nStatus & BLOCK_HAVE_DATA) || pindex->nHeight <= m_chainman.ActiveChain().Tip()->nHeight - nPrunedBlocksLikelyToHave))
             {
                 LogPrint(BCLog::NET, " getblocks stopping, pruned or too old block at %d %s\n", pindex->nHeight, pindex->GetBlockHash().ToString());
@@ -3197,7 +3197,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
             if (pindex->nHeight >= m_chainman.ActiveChain().Height() - MAX_BLOCKTXN_DEPTH) {
                 CBlock block;
-                bool ret = ReadBlockFromDisk(block, pindex, m_chainparams.GetConsensus());
+                bool ret = ReadBlockFromDisk(block, pindex, m_chainparams.GetConsensus(pindex->nHeight));
                 assert(ret);
 
                 SendBlockTransactions(pfrom, block, req);
@@ -3267,7 +3267,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         LogPrint(BCLog::NET, "getheaders %d to %s from peer=%d\n", (pindex ? pindex->nHeight : -1), hashStop.IsNull() ? "end" : hashStop.ToString(), pfrom.GetId());
         for (; pindex; pindex = m_chainman.ActiveChain().Next(pindex))
         {
-            vHeaders.push_back(pindex->GetBlockHeader());
+            vHeaders.push_back(pindex->GetBlockHeader(m_chainparams.GetConsensus(pindex->nHeight), false));
             if (--nLimit <= 0 || pindex->GetBlockHash() == hashStop)
                 break;
         }
@@ -3593,7 +3593,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-        if (DeploymentActiveAt(*pindex, m_chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT) && !nodestate->fSupportsDesiredCmpctVersion) {
+        if (DeploymentActiveAt(*pindex, m_chainparams.GetConsensus(m_chainman.ActiveChain().Height()), Consensus::DEPLOYMENT_SEGWIT) && !nodestate->fSupportsDesiredCmpctVersion) {
             // Don't bother trying to process compact blocks from v1 peers
             // after segwit activates.
             return;
@@ -4602,7 +4602,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 {
     PeerRef peer = GetPeerRef(pto->GetId());
     if (!peer) return false;
-    const Consensus::Params& consensusParams = m_chainparams.GetConsensus();
+
 
     // We must call MaybeDiscourageAndDisconnect first, to ensure that we'll
     // disconnect misbehaving peers even before the version handshake is complete.
@@ -4632,6 +4632,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 
     {
         LOCK(cs_main);
+        const Consensus::Params& tip_consensusParams = m_chainparams.GetConsensus(m_chainman.ActiveChain().Height());
 
         CNodeState &state = *State(pto->GetId());
 
@@ -4648,7 +4649,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                         // Convert HEADERS_DOWNLOAD_TIMEOUT_PER_HEADER to microseconds before scaling
                         // to maintain precision
                         std::chrono::microseconds{HEADERS_DOWNLOAD_TIMEOUT_PER_HEADER} *
-                        (GetAdjustedTime() - pindexBestHeader->GetBlockTime()) / consensusParams.nPowTargetSpacing
+                        (GetAdjustedTime() - pindexBestHeader->GetBlockTime()) / tip_consensusParams.nPowTargetSpacing
                     );
                 nSyncStarted++;
                 const CBlockIndex *pindexStart = pindexBestHeader;
@@ -4716,14 +4717,14 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     pBestIndex = pindex;
                     if (fFoundStartingHeader) {
                         // add this to the headers message
-                        vHeaders.push_back(pindex->GetBlockHeader());
+                        vHeaders.push_back(pindex->GetBlockHeader(m_chainparams.GetConsensus(pindex->nHeight), false));
                     } else if (PeerHasHeader(&state, pindex)) {
                         continue; // keep looking for the first new block
                     } else if (pindex->pprev == nullptr || PeerHasHeader(&state, pindex->pprev)) {
                         // Peer doesn't have this header but they do have the prior one.
                         // Start sending headers.
                         fFoundStartingHeader = true;
-                        vHeaders.push_back(pindex->GetBlockHeader());
+                        vHeaders.push_back(pindex->GetBlockHeader(m_chainparams.GetConsensus(pindex->nHeight), false));
                     } else {
                         // Peer doesn't have this header or the prior one -- nothing will
                         // connect, so bail out.
@@ -4756,7 +4757,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     }
                     if (!fGotBlockFromCache) {
                         CBlock block;
-                        bool ret = ReadBlockFromDisk(block, pBestIndex, consensusParams);
+                        bool ret = ReadBlockFromDisk(block, pBestIndex, m_chainparams.GetConsensus(pBestIndex->nHeight));
                         assert(ret);
                         CBlockHeaderAndShortTxIDs cmpctblock(block, state.fWantsCmpctWitness);
                         m_connman.PushMessage(pto, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, cmpctblock));
@@ -4975,7 +4976,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         if (state.vBlocksInFlight.size() > 0) {
             QueuedBlock &queuedBlock = state.vBlocksInFlight.front();
             int nOtherPeersWithValidatedDownloads = m_peers_downloading_from - 1;
-            if (current_time > state.m_downloading_since + std::chrono::seconds{consensusParams.nPowTargetSpacing} * (BLOCK_DOWNLOAD_TIMEOUT_BASE + BLOCK_DOWNLOAD_TIMEOUT_PER_PEER * nOtherPeersWithValidatedDownloads)) {
+            if (current_time > state.m_downloading_since + std::chrono::seconds{tip_consensusParams.nPowTargetSpacing} * (BLOCK_DOWNLOAD_TIMEOUT_BASE + BLOCK_DOWNLOAD_TIMEOUT_PER_PEER * nOtherPeersWithValidatedDownloads)) {
                 LogPrintf("Timeout downloading block %s from peer=%d, disconnecting\n", queuedBlock.pindex->GetBlockHash().ToString(), pto->GetId());
                 pto->fDisconnect = true;
                 return true;

@@ -115,7 +115,7 @@ typedef std::map<std::string, std::string> mapValue_t;
  * but old wallet.dat files may still contain vtxPrev vectors of CMerkleTxs.
  * These need to get deserialized for field alignment when deserializing
  * a CWalletTx, but the deserialized values are discarded.**/
-class CMerkleTx
+class CWMerkleTx
 {
 public:
     template<typename Stream>
@@ -246,7 +246,7 @@ public:
         Init();
 
         std::vector<uint256> dummy_vector1; //!< Used to be vMerkleBranch
-        std::vector<CMerkleTx> dummy_vector2; //!< Used to be vtxPrev
+        std::vector<CWMerkleTx> dummy_vector2; //!< Used to be vtxPrev
         bool dummy_bool; //! Used to be fSpent
         uint256 serialized_block_hash;
         int serializedIndex;

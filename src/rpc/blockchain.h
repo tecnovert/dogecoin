@@ -22,6 +22,7 @@ class CBlockIndex;
 class CChainState;
 class CTxMemPool;
 class UniValue;
+class ChainstateManager;
 namespace node {
 struct NodeContext;
 } // namespace node
@@ -40,7 +41,7 @@ double GetDifficulty(const CBlockIndex* blockindex);
 void RPCNotifyBlockChange(const CBlockIndex*);
 
 /** Block description to JSON */
-UniValue blockToJSON(const CBlock& block, const CBlockIndex* tip, const CBlockIndex* blockindex, TxVerbosity verbosity) LOCKS_EXCLUDED(cs_main);
+UniValue blockToJSON(const CBlock& block, const CBlockIndex* tip, const CBlockIndex* blockindex, TxVerbosity verbosity, ChainstateManager& chainman) LOCKS_EXCLUDED(cs_main);
 
 /** Mempool information to JSON */
 UniValue MempoolInfoToJSON(const CTxMemPool& pool);

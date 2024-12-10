@@ -16,10 +16,22 @@
 class CCoinsViewCache;
 class CTxOut;
 
+/** Recommended transaction fee by Dogecoin Core developers
+  *
+  * All fee defaults used throughout the client derive their
+  * value from this base default.
+  */
+static const CAmount RECOMMENDED_MIN_TX_FEE = COIN / 100;
+
+/** Default for -blockmaxsize, which controls the maximum size of block the mining code will create **/
+static const unsigned int DEFAULT_BLOCK_MAX_SIZE = 750000;
+/** Default for -blockprioritysize, maximum space for zero/low-fee transactions **/
+static const unsigned int DEFAULT_BLOCK_PRIORITY_SIZE = 27000;
+
 /** Default for -blockmaxweight, which controls the range of block weights the mining code will create **/
 static const unsigned int DEFAULT_BLOCK_MAX_WEIGHT = MAX_BLOCK_WEIGHT - 4000;
 /** Default for -blockmintxfee, which sets the minimum feerate for a transaction in blocks created by mining code **/
-static const unsigned int DEFAULT_BLOCK_MIN_TX_FEE = 1000;
+static const unsigned int DEFAULT_BLOCK_MIN_TX_FEE = (unsigned int) RECOMMENDED_MIN_TX_FEE;
 /** The maximum weight for transactions we're willing to relay/mine */
 static const unsigned int MAX_STANDARD_TX_WEIGHT = 400000;
 /** The minimum non-witness size for transactions we're willing to relay/mine (1 segwit input + 1 P2WPKH output = 82 bytes) */
@@ -30,8 +42,22 @@ static const unsigned int MAX_P2SH_SIGOPS = 15;
 static const unsigned int MAX_STANDARD_TX_SIGOPS_COST = MAX_BLOCK_SIGOPS_COST/5;
 /** Default for -maxmempool, maximum megabytes of mempool memory usage */
 static const unsigned int DEFAULT_MAX_MEMPOOL_SIZE = 300;
-/** Default for -incrementalrelayfee, which sets the minimum feerate increase for mempool limiting or BIP 125 replacement **/
-static const unsigned int DEFAULT_INCREMENTAL_RELAY_FEE = 1000;
+/** Default for -incrementalrelayfee, which sets the minimum feerate increase
+ *  for mempool limiting or BIP 125 replacement
+ *
+ *  Dogecoin:    Increment mempool limits and accept RBF in steps of 0.0001 DOGE
+ *  Calculation: DEFAULT_MIN_RELAY_TX_FEE = RECOMMENDED_MIN_TX_FEE / 10
+ *               DEFAULT_INCREMENTAL_RELAY_FEE = DEFAULT_MIN_RELAY_TX_FEE / 10
+ *
+ *  Rationale:   This implements a smaller granularity than the wallet
+ *               implementation for fee increments by default, leaving room for
+ *               alternative increment strategies, yet limiting the amount of
+ *               ineffective RBF spam we expose the network to. This also makes
+ *               an RBF fee bump 10x cheaper than a CPFP transaction, because
+ *               RBF leaves no on-chain waste, whereas CPFP adds another
+ *               transaction to the chain.
+ */
+static const CAmount DEFAULT_INCREMENTAL_RELAY_FEE = RECOMMENDED_MIN_TX_FEE / 100;
 /** Default for -bytespersigop */
 static const unsigned int DEFAULT_BYTES_PER_SIGOP = 20;
 /** Default for -permitbaremultisig */
@@ -52,6 +78,23 @@ static const unsigned int MAX_STANDARD_SCRIPTSIG_SIZE = 1650;
  * only increase the dust limit after prior releases were already not creating
  * outputs below the new threshold */
 static const unsigned int DUST_RELAY_TX_FEE = 3000;
+/**
+ * Dogecoin: Default dust limit that is evaluated when considering whether a
+ * transaction output is required to pay additional fee for relay and inclusion
+ * in blocks. Overridden by -dustlimit
+ */
+static const CAmount DEFAULT_DUST_LIMIT = RECOMMENDED_MIN_TX_FEE;
+/**
+ * Dogecoin: Default hard dust limit that is evaluated when considering whether
+ * a transaction is standard. Transactions under this limit will not be accepted
+ * to the mempool and thus not relayed. Can be overridden by -harddustlimit
+ *
+ * Changing the hard dust limit changes which transactions are standard and
+ * should be done with care and ideally rarely. It makes sense to only increase
+ * this limit after prior releases were already not creating outputs below the
+ * new threshold
+ */
+static const CAmount DEFAULT_HARD_DUST_LIMIT = DEFAULT_DUST_LIMIT / 10;
 /**
  * Standard script verification flags that standard transactions will comply
  * with. However scripts violating these flags may still be present in valid
@@ -131,5 +174,8 @@ static inline int64_t GetVirtualTransactionInputSize(const CTxIn& tx)
 {
     return GetVirtualTransactionInputSize(tx, 0, 0);
 }
+
+extern CAmount nDustLimit;
+extern CAmount nHardDustLimit;
 
 #endif // BITCOIN_POLICY_POLICY_H

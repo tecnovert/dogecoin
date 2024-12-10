@@ -56,6 +56,8 @@ void WalletInit::AddWalletOptions(ArgsManager& argsman) const
                                                                 "Note: An output is discarded if it is dust at this rate, but we will always discard up to the dust relay fee and a discard fee above that is limited by the fee estimate for the longest target",
                                                               CURRENCY_UNIT, FormatMoney(DEFAULT_DISCARD_FEE)), ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
 
+    argsman.AddArg("-discardthreshold=<amt>", strprintf("The minimum transaction output size (in %s) used to validate wallet transactions and discard change (to fee) (default: %s)",
+                                                               CURRENCY_UNIT, FormatMoney(DEFAULT_DISCARD_THRESHOLD)), ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
     argsman.AddArg("-fallbackfee=<amt>", strprintf("A fee rate (in %s/kvB) that will be used when fee estimation has insufficient data. 0 to entirely disable the fallbackfee feature. (default: %s)",
                                                                CURRENCY_UNIT, FormatMoney(DEFAULT_FALLBACK_FEE)), ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
     argsman.AddArg("-keypool=<n>", strprintf("Set key pool size to <n> (default: %u). Warning: Smaller sizes may increase the risk of losing funds when restoring from an old backup, if none of the addresses in the original keypool have been used.", DEFAULT_KEYPOOL_SIZE), ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
@@ -64,6 +66,7 @@ void WalletInit::AddWalletOptions(ArgsManager& argsman) const
         CURRENCY_UNIT, FormatMoney(DEFAULT_TRANSACTION_MAXFEE)), ArgsManager::ALLOW_ANY, OptionsCategory::DEBUG_TEST);
     argsman.AddArg("-mintxfee=<amt>", strprintf("Fee rates (in %s/kvB) smaller than this are considered zero fee for transaction creation (default: %s)",
                                                             CURRENCY_UNIT, FormatMoney(DEFAULT_TRANSACTION_MINFEE)), ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
+
     argsman.AddArg("-paytxfee=<amt>", strprintf("Fee rate (in %s/kvB) to add to transactions you send (default: %s)",
                                                             CURRENCY_UNIT, FormatMoney(CFeeRate{DEFAULT_PAY_TX_FEE}.GetFeePerK())), ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
 #ifdef ENABLE_EXTERNAL_SIGNER

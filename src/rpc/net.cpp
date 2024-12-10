@@ -299,6 +299,10 @@ static RPCHelpMan addnode()
 
     std::string strNode = request.params[0].get_str();
 
+    if (strNode.size() > 256) {
+        throw JSONRPCError(RPC_CLIENT_NODE_ADDRESS_INVALID, "Error: Node address is invalid");
+    }
+
     if (strCommand == "onetry")
     {
         CAddress addr;
@@ -309,7 +313,7 @@ static RPCHelpMan addnode()
     if (strCommand == "add")
     {
         if (!connman.AddNode(strNode)) {
-            throw JSONRPCError(RPC_CLIENT_NODE_ALREADY_ADDED, "Error: Node already added");
+            throw JSONRPCError(RPC_CLIENT_NODE_ALREADY_ADDED, "Error: Unable to add node");
         }
     }
     else if(strCommand == "remove")
@@ -646,6 +650,8 @@ static RPCHelpMan getnetworkinfo()
     obj.pushKV("networks",      GetNetworksInfo());
     obj.pushKV("relayfee",      ValueFromAmount(::minRelayTxFee.GetFeePerK()));
     obj.pushKV("incrementalfee", ValueFromAmount(::incrementalRelayFee.GetFeePerK()));
+    obj.pushKV("softdustlimit",  ValueFromAmount(nDustLimit));
+    obj.pushKV("harddustlimit",  ValueFromAmount(nHardDustLimit));
     UniValue localAddresses(UniValue::VARR);
     {
         LOCK(g_maplocalhost_mutex);

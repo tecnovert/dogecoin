@@ -85,6 +85,14 @@ EXTENDED_SCRIPTS = [
 ]
 
 BASE_SCRIPTS = [
+    'doge_createauxblock.py',
+    'doge_auxpow.py',
+    'doge_dustlimits.py',
+    #'doge_getauxblock.py',
+    'doge_feelimit.py',
+    'doge_paytxfee.py',
+    'doge_addnode.py',
+
     # Scripts that are run by default.
     # Longest test should go first, to favor running tests in parallel
     'wallet_hd.py --legacy-wallet',
@@ -390,7 +398,7 @@ def main():
     logging.basicConfig(format='%(message)s', level=logging_level)
 
     # Create base test directory
-    tmpdir = "%s/test_runner_₿_🏃_%s" % (args.tmpdirprefix, datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+    tmpdir = "%s/test_runner_doge_🏃_%s" % (args.tmpdirprefix, datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
 
     os.makedirs(tmpdir)
 
@@ -728,7 +736,7 @@ class TestResult():
 def check_script_prefixes():
     """Check that test scripts start with one of the allowed name prefixes."""
 
-    good_prefixes_re = re.compile("^(example|feature|interface|mempool|mining|p2p|rpc|wallet|tool)_")
+    good_prefixes_re = re.compile("^(example|feature|interface|mempool|mining|p2p|rpc|wallet|tool|doge)_")
     bad_script_names = [script for script in ALL_SCRIPTS if good_prefixes_re.match(script) is None]
 
     if bad_script_names:

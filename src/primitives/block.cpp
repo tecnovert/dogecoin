@@ -8,9 +8,17 @@
 #include <hash.h>
 #include <tinyformat.h>
 
-uint256 CBlockHeader::GetHash() const
+void CBlockHeader::SetAuxpow (CAuxPow* apow)
 {
-    return SerializeHash(*this);
+    if (apow)
+    {
+        auxpow.reset(apow);
+        SetAuxpowFlag(true);
+    } else
+    {
+        auxpow.reset();
+        SetAuxpowFlag(false);
+    }
 }
 
 std::string CBlock::ToString() const
