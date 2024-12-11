@@ -1731,7 +1731,7 @@ static RPCHelpMan getdeploymentinfo()
                 }
             }
 
-            const Consensus::Params& consensusParams = Params().GetConsensus();
+            const Consensus::Params& consensusParams = Params().GetConsensus(blockindex->nHeight);
 
             UniValue deploymentinfo(UniValue::VOBJ);
             deploymentinfo.pushKV("hash", blockindex->GetBlockHash().ToString());

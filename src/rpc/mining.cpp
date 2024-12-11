@@ -1555,66 +1555,6 @@ static bool AuxMiningSubmitBlock(const JSONRPCRequest& request, const std::strin
     //}
     //return BIP22ValidationResult(sc->state);
 //}
-/*
-UniValue createauxblock(const JSONRPCRequest& request)
-{
-    if (request.fHelp || request.params.size() != 1)
-        throw std::runtime_error(
-            "createauxblock <address>\n"
-            "\ncreate a new block and return information required to merge-mine it.\n"
-            "\nArguments:\n"
-            "1. address      (string, required) specify coinbase transaction payout address\n"
-            "\nResult:\n"
-            "{\n"
-            "  \"hash\"               (string) hash of the created block\n"
-            "  \"chainid\"            (numeric) chain ID for this block\n"
-            "  \"previousblockhash\"  (string) hash of the previous block\n"
-            "  \"coinbasevalue\"      (numeric) value of the block's coinbase\n"
-            "  \"bits\"               (string) compressed target of the block\n"
-            "  \"height\"             (numeric) height of the block\n"
-            + (std::string) (
-              fUseNamecoinApi
-              ? "  \"_target\"            (string) target in reversed byte order\n"
-              : "  \"target\"             (string) target in reversed byte order\n"
-            )
-            + "}\n"
-            "\nExamples:\n"
-            + HelpExampleCli("createauxblock", "\"address\"")
-            + HelpExampleRpc("createauxblock", "\"address\"")
-            );
-
-    AuxMiningCheck(request);
-    // Check coinbase payout address
-    CBitcoinAddress coinbaseAddress(request.params[0].get_str());
-
-    if (!coinbaseAddress.IsValid())
-        throw JSONRPCError(RPC_INVALID_PARAMETER,"Invalid coinbase payout address");
-
-    const CScript scriptPubKey = GetScriptForDestination(coinbaseAddress.Get());
-    return AuxMiningCreateBlock(request, scriptPubKey);
-}
-
-UniValue submitauxblock(const JSONRPCRequest& request)
-{
-    if (request.fHelp || request.params.size() != 2)
-        throw std::runtime_error(
-            "submitauxblock <hash> <auxpow>\n"
-            "\nsubmit a solved auxpow for a previously block created by 'createauxblock'.\n"
-            "\nArguments:\n"
-            "1. hash      (string, required) hash of the block to submit\n"
-            "2. auxpow    (string, required) serialised auxpow found\n"
-            "\nResult:\n"
-            "xxxxx        (boolean) whether the submitted block was correct\n"
-            "\nExamples:\n"
-            + HelpExampleCli("submitauxblock", "\"hash\" \"serialised auxpow\"")
-            + HelpExampleRpc("submitauxblock", "\"hash\" \"serialised auxpow\"")
-            );
-    AuxMiningCheck(request);
-    return AuxMiningSubmitBlock(request,
-                                request.params[0].get_str(),
-                                request.params[1].get_str());
-}
-*/
 
 static RPCHelpMan createauxblock()
 {
